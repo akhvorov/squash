@@ -26,6 +26,7 @@
             border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
             overflow: hidden;
+            position: relative;
         }
 
         .header {
@@ -252,17 +253,15 @@
 </head>
 <body>
     <div class="container">
+        <div class="language-switcher" style="position: absolute; top: 20px; right: 20px; z-index: 10;">
+            <button onclick="switchLanguage('ru')" class="lang-btn active" id="lang-ru">RU</button>
+            <button onclick="switchLanguage('en')" class="lang-btn" id="lang-en">EN</button>
+            <button onclick="switchLanguage('de')" class="lang-btn" id="lang-de">DE</button>
+        </div>
         <div class="header">
-            <div style="position: relative; margin-bottom: 10px;">
-                <div style="text-align: center;">
-                    <h1 id="title">🏸 Калькулятор сквоша</h1>
-                    <p id="subtitle">Оптимальная схема оплаты с учетом подписок Urban Sports</p>
-                </div>
-                <div class="language-switcher" style="position: absolute; top: 0; right: 0;">
-                    <button onclick="switchLanguage('ru')" class="lang-btn active" id="lang-ru">RU</button>
-                    <button onclick="switchLanguage('en')" class="lang-btn" id="lang-en">EN</button>
-                    <button onclick="switchLanguage('de')" class="lang-btn" id="lang-de">DE</button>
-                </div>
+            <div style="text-align: center;">
+                <h1 id="title">🏸 Калькулятор сквоша</h1>
+                <p id="subtitle">Оптимальная схема оплаты с учетом подписок Urban Sports</p>
             </div>
             <div style="margin-top: 15px; font-size: 0.9em; opacity: 0.9;">
                 <div id="pricing-info">
