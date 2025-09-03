@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Калькулятор стоимости игры в сквош</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .form-section {
+            padding: 40px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 1.1em;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #4facfe;
+            box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .calculate-btn {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.2em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        .calculate-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .results {
+            padding: 40px;
+            background: #f8f9fa;
+            border-top: 1px solid #e1e5e9;
+        }
+
+        .results.hidden {
+            display: none;
+        }
+
+        .cost-summary {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+
+        .cost-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .cost-item:last-child {
+            border-bottom: none;
+            font-weight: 600;
+            font-size: 1.1em;
+            color: #667eea;
+        }
+
+        .plan-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+
+        .plan-section h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+        }
+
+        .court-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #4facfe;
+        }
+
+        .payments-section {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+
+        .payments-section h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+        }
+
+        .payment-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .payment-item:last-child {
+            border-bottom: none;
+        }
+
+        .player-with-sub {
+            color: #28a745;
+            font-weight: 600;
+        }
+
+        .player-normal {
+            color: #333;
+        }
+
+        .amount {
+            font-weight: 600;
+            color: #667eea;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+        }
+
+        @media (max-width: 600px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .form-section, .results {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏸 Калькулятор сквоша</h1>
+            <p>Оптимальная схема оплаты с учетом подписок Urban Sports</p>
+        </div>
+
+        <div class="form-section">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="courts">Количество кортов</label>
+                    <input type="number" id="courts" min="1" max="10" value="3">
+                </div>
+                <div class="form-group">
+                    <label for="players">Общее количество игроков</label>
+                    <input type="number" id="players" min="2" max="20" value="6">
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="subs">Игроки с подпиской Urban Sports</label>
+                    <input type="number" id="subs" min="0" max="20" value="3">
+                </div>
+                <div class="form-group">
+                    <label for="border_slot">Граница времени (слот)</label>
+                    <select id="border_slot">
+                        <option value="0">Оба слота после 21:00</option>
+                        <option value="1">Первый до 21:00, второй после</option>
+                        <option value="2" selected>Оба слота до 21:00</option>
+                    </select>
+                </div>
+            </div>
+
+            <button class="calculate-btn" onclick="calculate()">Рассчитать оптимальную схему</button>
+        </div>
+
+        <div class="results hidden" id="results">
+            <div class="cost-summary">
+                <h3>💰 Стоимость</h3>
+                <div class="cost-item">
+                    <span>Минимальная стоимость (с подписками):</span>
+                    <span id="actual-cost">-</span>
+                </div>
+                <div class="cost-item">
+                    <span>Стоимость без подписок:</span>
+                    <span id="cost-without-subs">-</span>
+                </div>
+                <div class="cost-item">
+                    <span>Экономия от подписок:</span>
+                    <span id="savings">-</span>
+                </div>
+            </div>
+
+            <div class="plan-section">
+                <h3>📋 Оптимальный план</h3>
+                <div id="plan-details"></div>
+            </div>
+
+            <div class="payments-section">
+                <h3>💳 Платежи по игрокам</h3>
+                <div id="payments-details"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Цены на человека
+        const PRICES = {
+            slot_before_21: 9,    // слот до 21:00
+            slot_after_21: 6,     // слот после 21:00
+            pp_before_21: 12,     // PowerPlay до 21:00
+            pp_after_21: 9        // PowerPlay после 21:00
+        };
+
+        function getSlotPrice(slotIndex, borderSlot) {
+            return slotIndex < borderSlot ? PRICES.slot_before_21 : PRICES.slot_after_21;
+        }
+
+        function getPPPrice(slotIndex, borderSlot) {
+            if (slotIndex + 1 < borderSlot) return PRICES.pp_before_21;
+            if (slotIndex >= borderSlot) return PRICES.pp_after_21;
+            return PRICES.pp_before_21;
+        }
+
+        function squashMinCost(courts, subs, borderSlot) {
+            let bestCost = Infinity;
+            let bestPlan = null;
+            const costWithoutSubs = courts * getPPPrice(0, borderSlot) * 2;
+
+            // Генерируем все комбинации кортов
+            const choices = generateChoices(courts);
+            
+            for (const choice of choices) {
+                let costAsPP = 0;
+                let slotsForSubs = [];
+                
+                for (const c of choice) {
+                    if (c === "pp") {
+                        costAsPP += getPPPrice(0, borderSlot) * 2;
+                    } else {
+                        // Обычный корт = 2 слота на каждого из 2-х игроков
+                        slotsForSubs.push(getSlotPrice(0, borderSlot));
+                        slotsForSubs.push(getSlotPrice(0, borderSlot));
+                        slotsForSubs.push(getSlotPrice(1, borderSlot));
+                        slotsForSubs.push(getSlotPrice(1, borderSlot));
+                    }
+                }
+
+                // Применяем подписки к разбитым слотам
+                const freeSlots = subs;
+                const slotCostsSorted = slotsForSubs.sort((a, b) => a - b);
+                const paidSlots = slotCostsSorted.slice(freeSlots);
+                const costWithSubs = paidSlots.reduce((sum, cost) => sum + cost, 0);
+                
+                const totalCost = costAsPP + costWithSubs;
+
+                if (totalCost < bestCost) {
+                    bestCost = totalCost;
+                    bestPlan = choice;
+                }
+            }
+
+            return { cost: bestCost, plan: bestPlan, costWithoutSubs };
+        }
+
+        function generateChoices(courts) {
+            const choices = [];
+            const generate = (current, remaining) => {
+                if (remaining === 0) {
+                    choices.push([...current]);
+                    return;
+                }
+                current.push("pp");
+                generate(current, remaining - 1);
+                current.pop();
+                current.push("slots");
+                generate(current, remaining - 1);
+                current.pop();
+            };
+            generate([], courts);
+            return choices;
+        }
+
+        function calculatePayments(actualCost, costWithoutSubs, players, subs) {
+            const savings = costWithoutSubs - actualCost;
+            const baseCostPerPerson = costWithoutSubs / players;
+            const savingsPerSub = subs > 0 ? savings / subs : 0;
+            
+            const normalPayment = baseCostPerPerson;
+            const subsPayment = baseCostPerPerson - savingsPerSub;
+            
+            const payments = {};
+            for (let i = 1; i <= players; i++) {
+                if (i <= subs) {
+                    payments[`Игрок ${i} (с подпиской)`] = Math.round(subsPayment * 100) / 100;
+                } else {
+                    payments[`Игрок ${i}`] = Math.round(normalPayment * 100) / 100;
+                }
+            }
+            
+            return payments;
+        }
+
+        function formatPlan(plan, borderSlot) {
+            const details = [];
+            let totalSubsUsed = 0;
+            
+            for (let i = 0; i < plan.length; i++) {
+                const courtNum = i + 1;
+                const choice = plan[i];
+                
+                if (choice === "pp") {
+                    const ppCost = getPPPrice(0, borderSlot) * 2;
+                    const timeDesc = 0 < borderSlot ? "до 21:00" : "после 21:00";
+                    details.push(`<div class="court-item">Корт ${courtNum}: PowerPlay (${timeDesc}) - ${ppCost}€</div>`);
+                } else {
+                    const slot1Cost = getSlotPrice(0, borderSlot);
+                    const slot2Cost = getSlotPrice(1, borderSlot);
+                    const time1 = 0 < borderSlot ? "до 21:00" : "после 21:00";
+                    const time2 = 1 < borderSlot ? "до 21:00" : "после 21:00";
+                    
+                    const remainingSubs = parseInt(document.getElementById('subs').value) - totalSubsUsed;
+                    const courtSlots = [slot1Cost, slot1Cost, slot2Cost, slot2Cost];
+                    const courtSlotsSorted = courtSlots.sort((a, b) => a - b);
+                    
+                    const subsForCourt = Math.min(remainingSubs, courtSlots.length);
+                    const paidSlots = courtSlotsSorted.slice(subsForCourt);
+                    const courtCost = paidSlots.reduce((sum, cost) => sum + cost, 0);
+                    
+                    totalSubsUsed += subsForCourt;
+                    
+                    details.push(`<div class="court-item">Корт ${courtNum}: ${subsForCourt} подписками + ${paidSlots.length} оплатой = ${courtCost}€ (${time1}, ${time2})</div>`);
+                }
+            }
+            
+            return details.join('');
+        }
+
+        function calculate() {
+            const courts = parseInt(document.getElementById('courts').value);
+            const players = parseInt(document.getElementById('players').value);
+            const subs = parseInt(document.getElementById('subs').value);
+            const borderSlot = parseInt(document.getElementById('border_slot').value);
+
+            // Валидация
+            if (subs > players) {
+                showError('Количество игроков с подписками не может быть больше общего количества игроков');
+                return;
+            }
+
+            if (players < 2) {
+                showError('Минимум 2 игрока');
+                return;
+            }
+
+            if (courts < 1) {
+                showError('Минимум 1 корт');
+                return;
+            }
+
+            try {
+                const result = squashMinCost(courts, subs, borderSlot);
+                const payments = calculatePayments(result.cost, result.costWithoutSubs, players, subs);
+                
+                // Обновляем результаты
+                document.getElementById('actual-cost').textContent = `${result.cost} €`;
+                document.getElementById('cost-without-subs').textContent = `${result.costWithoutSubs} €`;
+                document.getElementById('savings').textContent = `${result.costWithoutSubs - result.cost} €`;
+                
+                document.getElementById('plan-details').innerHTML = formatPlan(result.plan, borderSlot);
+                
+                const paymentsHTML = Object.entries(payments).map(([player, amount]) => {
+                    const className = player.includes('подпиской') ? 'player-with-sub' : 'player-normal';
+                    return `<div class="payment-item">
+                        <span class="${className}">${player}</span>
+                        <span class="amount">${amount} €</span>
+                    </div>`;
+                }).join('');
+                
+                document.getElementById('payments-details').innerHTML = paymentsHTML;
+                
+                // Показываем результаты
+                document.getElementById('results').classList.remove('hidden');
+                hideError();
+                
+            } catch (error) {
+                showError('Ошибка при расчете: ' + error.message);
+            }
+        }
+
+        function showError(message) {
+            let errorDiv = document.getElementById('error-message');
+            if (!errorDiv) {
+                errorDiv = document.createElement('div');
+                errorDiv.id = 'error-message';
+                errorDiv.className = 'error';
+                document.querySelector('.form-section').appendChild(errorDiv);
+            }
+            errorDiv.textContent = message;
+        }
+
+        function hideError() {
+            const errorDiv = document.getElementById('error-message');
+            if (errorDiv) {
+                errorDiv.remove();
+            }
+        }
+
+        // Автоматический расчет при изменении параметров
+        document.addEventListener('DOMContentLoaded', function() {
+            const inputs = document.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                input.addEventListener('change', calculate);
+                input.addEventListener('input', calculate);
+            });
+        });
+    </script>
+</body>
+</html>
