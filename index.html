@@ -76,6 +76,34 @@
             box-shadow: 0 0 0 3px rgba(79, 172, 254, 0.1);
         }
 
+        .language-switcher {
+            display: flex;
+            gap: 5px;
+        }
+
+        .lang-btn {
+            padding: 8px 12px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .lang-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .lang-btn.active {
+            background: rgba(255, 255, 255, 0.9);
+            color: #667eea;
+            border-color: white;
+        }
+
 
 
         .form-row {
@@ -224,13 +252,24 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏸 Калькулятор сквоша</h1>
-            <p>Оптимальная схема оплаты с учетом подписок Urban Sports</p>
+            <div style="position: relative; margin-bottom: 10px;">
+                <div style="text-align: center;">
+                    <h1 id="title">🏸 Калькулятор сквоша</h1>
+                    <p id="subtitle">Оптимальная схема оплаты с учетом подписок Urban Sports</p>
+                </div>
+                <div class="language-switcher" style="position: absolute; top: 0; right: 0;">
+                    <button onclick="switchLanguage('ru')" class="lang-btn active" id="lang-ru">RU</button>
+                    <button onclick="switchLanguage('en')" class="lang-btn" id="lang-en">EN</button>
+                    <button onclick="switchLanguage('de')" class="lang-btn" id="lang-de">DE</button>
+                </div>
+            </div>
             <div style="margin-top: 15px; font-size: 0.9em; opacity: 0.9;">
-                <div><strong>Рабочие дни:</strong> пересечение с 16:30-21:00 (9€/12€) | остальное время (6€/9€)</div>
-                <div><strong>Выходные:</strong> все время (6€/9€)</div>
+                <div id="pricing-info">
+                    <div><strong>Рабочие дни:</strong> пересечение с 16:30-21:00 (9€/12€) | остальное время (6€/9€)</div>
+                    <div><strong>Выходные:</strong> все время (6€/9€)</div>
+                </div>
                 <div style="margin-top: 10px; font-size: 0.95em; color: #fff;">
-                    📅 <span id="current-day-display">Загрузка...</span> • Игра: 1.5 часа (PowerPlay)
+                    📅 <span id="current-day-display">Загрузка...</span> • <span id="game-duration">Игра: 1.5 часа (PowerPlay)</span>
                 </div>
             </div>
         </div>
@@ -239,59 +278,173 @@
             <!-- Основные параметры -->
             <div class="form-row">
                 <div class="form-group">
-                    <label for="courts">Количество кортов</label>
+                    <label for="courts" id="label-courts">Количество кортов</label>
                     <input type="number" id="courts" min="1" max="10" value="3">
                 </div>
                 <div class="form-group">
-                    <label for="players">Общее количество игроков</label>
+                    <label for="players" id="label-players">Общее количество игроков</label>
                     <input type="number" id="players" min="2" max="20" value="6">
                 </div>
             </div>
 
             <div class="form-row">
                 <div class="form-group">
-                    <label for="subs">Игроки с подпиской Urban Sports</label>
+                    <label for="subs" id="label-subs">Игроки с подпиской Urban Sports</label>
                     <input type="number" id="subs" min="0" max="20" value="3">
                 </div>
                 <div class="form-group">
-                    <label for="start_time">Время начала игры</label>
+                    <label for="start_time" id="label-start-time">Время начала игры</label>
                     <input type="time" id="start_time" value="18:00">
                 </div>
             </div>
 
-            <button class="calculate-btn" onclick="calculate()">Рассчитать оптимальную схему</button>
+            <button class="calculate-btn" onclick="calculate()" id="btn-calculate">Рассчитать оптимальную схему</button>
         </div>
 
         <div class="results hidden" id="results">
             <div class="cost-summary">
-                <h3>💰 Стоимость</h3>
+                <h3 id="cost-title">💰 Стоимость</h3>
                 <div class="cost-item">
-                    <span>Минимальная стоимость (с подписками):</span>
+                    <span id="cost-with-subs-label">Минимальная стоимость (с подписками):</span>
                     <span id="actual-cost">-</span>
                 </div>
                 <div class="cost-item">
-                    <span>Стоимость без подписок:</span>
+                    <span id="cost-without-subs-label">Стоимость без подписок:</span>
                     <span id="cost-without-subs">-</span>
                 </div>
                 <div class="cost-item">
-                    <span>Экономия от подписок:</span>
+                    <span id="savings-label">Экономия от подписок:</span>
                     <span id="savings">-</span>
                 </div>
             </div>
 
             <div class="plan-section">
-                <h3>📋 Оптимальный план</h3>
+                <h3 id="plan-title">📋 Оптимальный план</h3>
                 <div id="plan-details"></div>
             </div>
 
             <div class="payments-section">
-                <h3>💳 Платежи по игрокам</h3>
+                <h3 id="payments-title">💳 Платежи по игрокам</h3>
                 <div id="payments-details"></div>
             </div>
         </div>
     </div>
 
     <script>
+        // Переводы
+        const translations = {
+            ru: {
+                title: "🏸 Калькулятор сквоша",
+                subtitle: "Оптимальная схема оплаты с учетом подписок Urban Sports",
+                pricingInfo: {
+                    weekdays: "Рабочие дни:",
+                    weekends: "Выходные:",
+                    peakTime: "пересечение с 16:30-21:00 (9€/12€) | остальное время (6€/9€)",
+                    allTime: "все время (6€/9€)"
+                },
+                gameDuration: "Игра: 1.5 часа (PowerPlay)",
+                labels: {
+                    courts: "Количество кортов",
+                    players: "Общее количество игроков",
+                    subs: "Игроки с подпиской Urban Sports",
+                    startTime: "Время начала игры"
+                },
+                button: "Рассчитать оптимальную схему",
+                results: {
+                    cost: "💰 Стоимость",
+                    costWithSubs: "Минимальная стоимость (с подписками):",
+                    costWithoutSubs: "Стоимость без подписок:",
+                    savings: "Экономия от подписок:",
+                    plan: "📋 Оптимальный план",
+                    payments: "💳 Платежи по игрокам"
+                },
+                days: ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"],
+                dayTypes: {
+                    weekday: "рабочий день",
+                    weekend: "выходной"
+                },
+                timeDescriptions: {
+                    peak: "пересекается с 16:30-21:00",
+                    offPeak: "остальное время",
+                    weekend: "выходной"
+                }
+            },
+            en: {
+                title: "🏸 Squash Calculator",
+                subtitle: "Optimal payment scheme with Urban Sports subscriptions",
+                pricingInfo: {
+                    weekdays: "Weekdays:",
+                    weekends: "Weekends:",
+                    peakTime: "intersection with 16:30-21:00 (9€/12€) | other time (6€/9€)",
+                    allTime: "all time (6€/9€)"
+                },
+                gameDuration: "Game: 1.5 hours (PowerPlay)",
+                labels: {
+                    courts: "Number of courts",
+                    players: "Total number of players",
+                    subs: "Players with Urban Sports subscription",
+                    startTime: "Game start time"
+                },
+                button: "Calculate optimal scheme",
+                results: {
+                    cost: "💰 Cost",
+                    costWithSubs: "Minimum cost (with subscriptions):",
+                    costWithoutSubs: "Cost without subscriptions:",
+                    savings: "Savings from subscriptions:",
+                    plan: "📋 Optimal plan",
+                    payments: "💳 Player payments"
+                },
+                days: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+                dayTypes: {
+                    weekday: "weekday",
+                    weekend: "weekend"
+                },
+                timeDescriptions: {
+                    peak: "intersects with 16:30-21:00",
+                    offPeak: "other time",
+                    weekend: "weekend"
+                }
+            },
+            de: {
+                title: "🏸 Squash-Rechner",
+                subtitle: "Optimale Zahlungsregelung mit Urban Sports Abonnements",
+                pricingInfo: {
+                    weekdays: "Werktage:",
+                    weekends: "Wochenenden:",
+                    peakTime: "Überschneidung mit 16:30-21:00 (9€/12€) | andere Zeit (6€/9€)",
+                    allTime: "ganze Zeit (6€/9€)"
+                },
+                gameDuration: "Spiel: 1,5 Stunden (PowerPlay)",
+                labels: {
+                    courts: "Anzahl der Plätze",
+                    players: "Gesamtanzahl der Spieler",
+                    subs: "Spieler mit Urban Sports Abonnement",
+                    startTime: "Spielbeginn"
+                },
+                button: "Optimales Schema berechnen",
+                results: {
+                    cost: "💰 Kosten",
+                    costWithSubs: "Mindestkosten (mit Abonnements):",
+                    costWithoutSubs: "Kosten ohne Abonnements:",
+                    savings: "Ersparnis durch Abonnements:",
+                    plan: "📋 Optimaler Plan",
+                    payments: "💳 Spielerzahlungen"
+                },
+                days: ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"],
+                dayTypes: {
+                    weekday: "Werktag",
+                    weekend: "Wochenende"
+                },
+                timeDescriptions: {
+                    peak: "überschneidet sich mit 16:30-21:00",
+                    offPeak: "andere Zeit",
+                    weekend: "Wochenende"
+                }
+            }
+        };
+
+        let currentLanguage = 'ru';
+
         // Цены на человека
         const PRICES = {
             // Рабочие дни
@@ -418,11 +571,19 @@
             const subsPayment = baseCostPerPerson - savingsPerSub;
             
             const payments = {};
+            const t = translations[currentLanguage];
+            
             for (let i = 1; i <= players; i++) {
                 if (i <= subs) {
-                    payments[`Игрок ${i} (с подпиской)`] = Math.round(subsPayment * 100) / 100;
+                    const playerKey = currentLanguage === 'ru' ? `Игрок ${i} (с подпиской)` :
+                                    currentLanguage === 'en' ? `Player ${i} (with subscription)` :
+                                    `Spieler ${i} (mit Abonnement)`;
+                    payments[playerKey] = Math.round(subsPayment * 100) / 100;
                 } else {
-                    payments[`Игрок ${i}`] = Math.round(normalPayment * 100) / 100;
+                    const playerKey = currentLanguage === 'ru' ? `Игрок ${i}` :
+                                    currentLanguage === 'en' ? `Player ${i}` :
+                                    `Spieler ${i}`;
+                    payments[playerKey] = Math.round(normalPayment * 100) / 100;
                 }
             }
             
@@ -433,6 +594,14 @@
             const details = [];
             let totalSubsUsed = 0;
             
+            // Переводы для плана
+            const courtText = currentLanguage === 'ru' ? 'Корт' : 
+                            currentLanguage === 'en' ? 'Court' : 'Platz';
+            const subsText = currentLanguage === 'ru' ? 'подписками' : 
+                           currentLanguage === 'en' ? 'subscriptions' : 'Abonnements';
+            const paymentText = currentLanguage === 'ru' ? 'оплатой' : 
+                              currentLanguage === 'en' ? 'payment' : 'Zahlung';
+            
             for (let i = 0; i < plan.length; i++) {
                 const courtNum = i + 1;
                 const choice = plan[i];
@@ -440,7 +609,7 @@
                 if (choice === "pp") {
                     const ppCost = getPPPrice(startTime, dayType) * 2;
                     const timeDesc = getTimeDescription(startTime, dayType, 1.5);
-                    details.push(`<div class="court-item">Корт ${courtNum}: PowerPlay (${timeDesc}) - ${ppCost}€</div>`);
+                    details.push(`<div class="court-item">${courtText} ${courtNum}: PowerPlay (${timeDesc}) - ${ppCost}€</div>`);
                 } else {
                     const slot1Cost = getSlotPrice(startTime, dayType, 0);
                     const slot2Cost = getSlotPrice(startTime, dayType, 1);
@@ -457,7 +626,7 @@
                     
                     totalSubsUsed += subsForCourt;
                     
-                    details.push(`<div class="court-item">Корт ${courtNum}: ${subsForCourt} подписками + ${paidSlots.length} оплатой = ${courtCost}€ (${time1}, ${time2})</div>`);
+                    details.push(`<div class="court-item">${courtText} ${courtNum}: ${subsForCourt} ${subsText} + ${paidSlots.length} ${paymentText} = ${courtCost}€ (${time1}, ${time2})</div>`);
                 }
             }
             
@@ -479,12 +648,14 @@
             // Проверяем пересечение интервалов
             const isPeakTime = (startTimeMinutes < peakEnd && endTimeMinutes > peakStart);
             
+            const t = translations[currentLanguage].timeDescriptions;
+            
             if (dayType === 'weekend') {
-                return 'выходной';
+                return t.weekend;
             } else if (isPeakTime) {
-                return 'пересекается с 16:30-21:00';
+                return t.peak;
             } else {
-                return 'остальное время';
+                return t.offPeak;
             }
         }
 
@@ -592,19 +763,78 @@
             });
         });
 
-        function setTodayAsDefault() {
-            const today = new Date();
-            const dayOfWeek = today.getDay(); // 0 = воскресенье, 1 = понедельник, ..., 6 = суббота
+        function switchLanguage(lang) {
+            currentLanguage = lang;
             
-            // Обновляем отображение текущего дня
+            // Обновляем активную кнопку
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`lang-${lang}`).classList.add('active');
+            
+            // Обновляем интерфейс
+            updateInterface();
+            
+            // Если результаты уже показаны, пересчитываем их с новым языком
+            const resultsDiv = document.getElementById('results');
+            if (resultsDiv && !resultsDiv.classList.contains('hidden')) {
+                calculate();
+            }
+        }
+
+        function updateInterface() {
+            const t = translations[currentLanguage];
+            
+            // Заголовок
+            document.getElementById('title').textContent = t.title;
+            document.getElementById('subtitle').textContent = t.subtitle;
+            
+            // Информация о ценах
+            const pricingInfo = document.getElementById('pricing-info');
+            pricingInfo.innerHTML = `
+                <div><strong>${t.pricingInfo.weekdays}</strong> ${t.pricingInfo.peakTime}</div>
+                <div><strong>${t.pricingInfo.weekends}</strong> ${t.pricingInfo.allTime}</div>
+            `;
+            
+            // Длительность игры
+            document.getElementById('game-duration').textContent = t.gameDuration;
+            
+            // Лейблы формы
+            document.getElementById('label-courts').textContent = t.labels.courts;
+            document.getElementById('label-players').textContent = t.labels.players;
+            document.getElementById('label-subs').textContent = t.labels.subs;
+            document.getElementById('label-start-time').textContent = t.labels.startTime;
+            
+            // Кнопка
+            document.getElementById('btn-calculate').textContent = t.button;
+            
+            // Результаты
+            document.getElementById('cost-title').textContent = t.results.cost;
+            document.getElementById('cost-with-subs-label').textContent = t.results.costWithSubs;
+            document.getElementById('cost-without-subs-label').textContent = t.results.costWithoutSubs;
+            document.getElementById('savings-label').textContent = t.results.savings;
+            document.getElementById('plan-title').textContent = t.results.plan;
+            document.getElementById('payments-title').textContent = t.results.payments;
+            
+            // Обновляем отображение дня
+            updateDayDisplay();
+        }
+
+        function updateDayDisplay() {
+            const today = new Date();
+            const dayOfWeek = today.getDay();
+            const t = translations[currentLanguage];
+            
+            const dayName = t.days[dayOfWeek];
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            const dayType = isWeekend ? t.dayTypes.weekend : t.dayTypes.weekday;
+            
             const currentDayDisplay = document.getElementById('current-day-display');
             if (currentDayDisplay) {
-                const dayNames = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
-                const dayName = dayNames[dayOfWeek];
-                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-                const dayType = isWeekend ? 'выходной' : 'рабочий день';
                 currentDayDisplay.textContent = `${dayName} (${dayType})`;
             }
+        }
+
+        function setTodayAsDefault() {
+            updateDayDisplay();
         }
     </script>
 </body>
