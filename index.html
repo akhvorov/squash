@@ -224,6 +224,10 @@
         <div class="header">
             <h1>🏸 Калькулятор сквоша</h1>
             <p>Оптимальная схема оплаты с учетом подписок Urban Sports</p>
+            <div style="margin-top: 15px; font-size: 0.9em; opacity: 0.9;">
+                <div><strong>Рабочие дни:</strong> пересечение с 16:30-21:00 (9€/12€) | остальное время (6€/9€)</div>
+                <div><strong>Выходные:</strong> все время (6€/9€)</div>
+            </div>
         </div>
 
         <div class="form-section">
@@ -244,11 +248,24 @@
                     <input type="number" id="subs" min="0" max="20" value="3">
                 </div>
                 <div class="form-group">
-                    <label for="border_slot">Граница времени (слот)</label>
-                    <select id="border_slot">
-                        <option value="0">Оба слота после 21:00</option>
-                        <option value="1">Первый до 21:00, второй после</option>
-                        <option value="2" selected>Оба слота до 21:00</option>
+                    <label for="day_type">Тип дня</label>
+                    <select id="day_type">
+                        <option value="weekday" selected>Рабочий день</option>
+                        <option value="weekend">Выходной</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="start_time">Время начала игры</label>
+                    <input type="time" id="start_time" value="18:00">
+                </div>
+                <div class="form-group">
+                    <label for="duration">Длительность (часы)</label>
+                    <select id="duration">
+                        <option value="1.5" selected>1.5 часа (PowerPlay)</option>
+                        <option value="0.75">45 минут (обычный слот)</option>
                     </select>
                 </div>
             </div>
@@ -288,26 +305,66 @@
     <script>
         // Цены на человека
         const PRICES = {
-            slot_before_21: 9,    // слот до 21:00
-            slot_after_21: 6,     // слот после 21:00
-            pp_before_21: 12,     // PowerPlay до 21:00
-            pp_after_21: 9        // PowerPlay после 21:00
+            // Рабочие дни
+            weekday: {
+                peak: { slot: 9, pp: 12 },      // 16:30-21:00
+                off_peak: { slot: 6, pp: 9 }    // остальное время
+            },
+            // Выходные
+            weekend: {
+                peak: { slot: 6, pp: 9 },       // всегда дешевле
+                off_peak: { slot: 6, pp: 9 }
+            }
         };
 
-        function getSlotPrice(slotIndex, borderSlot) {
-            return slotIndex < borderSlot ? PRICES.slot_before_21 : PRICES.slot_after_21;
+        function getPriceForTime(startTime, dayType, duration) {
+            const startHour = parseInt(startTime.split(':')[0]);
+            const startMinute = parseInt(startTime.split(':')[1]);
+            const startTimeMinutes = startHour * 60 + startMinute;
+            
+            // Определяем, пересекается ли время игры с пиковым периодом (16:30-21:00)
+            const peakStart = 16 * 60 + 30; // 16:30
+            const peakEnd = 21 * 60;        // 21:00
+            
+            // Время окончания игры
+            const gameDurationMinutes = duration * 60;
+            const endTimeMinutes = startTimeMinutes + gameDurationMinutes;
+            
+            // Проверяем пересечение интервалов
+            const isPeakTime = (startTimeMinutes < peakEnd && endTimeMinutes > peakStart);
+            const priceCategory = isPeakTime ? 'peak' : 'off_peak';
+            
+            const dayPrices = PRICES[dayType];
+            const prices = dayPrices[priceCategory];
+            
+            if (duration === 1.5) {
+                return prices.pp; // PowerPlay
+            } else {
+                return prices.slot; // Обычный слот
+            }
         }
 
-        function getPPPrice(slotIndex, borderSlot) {
-            if (slotIndex + 1 < borderSlot) return PRICES.pp_before_21;
-            if (slotIndex >= borderSlot) return PRICES.pp_after_21;
-            return PRICES.pp_before_21;
+        function getSlotPrice(startTime, dayType, slotIndex) {
+            // Для обычного слота (45 минут)
+            const [hours, minutes] = startTime.split(':').map(Number);
+            const slotStartMinutes = hours * 60 + minutes + (slotIndex * 45);
+            const slotStartHours = Math.floor(slotStartMinutes / 60);
+            const slotStartMins = slotStartMinutes % 60;
+            
+            const slotTimeStr = slotStartHours.toString().padStart(2, '0') + ':' + 
+                               slotStartMins.toString().padStart(2, '0');
+            
+            return getPriceForTime(slotTimeStr, dayType, 0.75);
         }
 
-        function squashMinCost(courts, subs, borderSlot) {
+        function getPPPrice(startTime, dayType) {
+            return getPriceForTime(startTime, dayType, 1.5);
+        }
+
+        function squashMinCost(courts, subs, startTime, dayType) {
             let bestCost = Infinity;
             let bestPlan = null;
-            const costWithoutSubs = courts * getPPPrice(0, borderSlot) * 2;
+            const costWithoutSubs = courts * getPPPrice(startTime, dayType) * 2;
 
             // Генерируем все комбинации кортов
             const choices = generateChoices(courts);
@@ -318,13 +375,13 @@
                 
                 for (const c of choice) {
                     if (c === "pp") {
-                        costAsPP += getPPPrice(0, borderSlot) * 2;
+                        costAsPP += getPPPrice(startTime, dayType) * 2;
                     } else {
                         // Обычный корт = 2 слота на каждого из 2-х игроков
-                        slotsForSubs.push(getSlotPrice(0, borderSlot));
-                        slotsForSubs.push(getSlotPrice(0, borderSlot));
-                        slotsForSubs.push(getSlotPrice(1, borderSlot));
-                        slotsForSubs.push(getSlotPrice(1, borderSlot));
+                        slotsForSubs.push(getSlotPrice(startTime, dayType, 0));
+                        slotsForSubs.push(getSlotPrice(startTime, dayType, 0));
+                        slotsForSubs.push(getSlotPrice(startTime, dayType, 1));
+                        slotsForSubs.push(getSlotPrice(startTime, dayType, 1));
                     }
                 }
 
@@ -383,7 +440,7 @@
             return payments;
         }
 
-        function formatPlan(plan, borderSlot) {
+        function formatPlan(plan, startTime, dayType) {
             const details = [];
             let totalSubsUsed = 0;
             
@@ -392,14 +449,14 @@
                 const choice = plan[i];
                 
                 if (choice === "pp") {
-                    const ppCost = getPPPrice(0, borderSlot) * 2;
-                    const timeDesc = 0 < borderSlot ? "до 21:00" : "после 21:00";
+                    const ppCost = getPPPrice(startTime, dayType) * 2;
+                    const timeDesc = getTimeDescription(startTime, dayType, 1.5);
                     details.push(`<div class="court-item">Корт ${courtNum}: PowerPlay (${timeDesc}) - ${ppCost}€</div>`);
                 } else {
-                    const slot1Cost = getSlotPrice(0, borderSlot);
-                    const slot2Cost = getSlotPrice(1, borderSlot);
-                    const time1 = 0 < borderSlot ? "до 21:00" : "после 21:00";
-                    const time2 = 1 < borderSlot ? "до 21:00" : "после 21:00";
+                    const slot1Cost = getSlotPrice(startTime, dayType, 0);
+                    const slot2Cost = getSlotPrice(startTime, dayType, 1);
+                    const time1 = getTimeDescription(startTime, dayType, 0.75);
+                    const time2 = getTimeDescription(getNextSlotTime(startTime, 1), dayType, 0.75);
                     
                     const remainingSubs = parseInt(document.getElementById('subs').value) - totalSubsUsed;
                     const courtSlots = [slot1Cost, slot1Cost, slot2Cost, slot2Cost];
@@ -418,11 +475,45 @@
             return details.join('');
         }
 
+        function getTimeDescription(startTime, dayType, duration = 1.5) {
+            const startHour = parseInt(startTime.split(':')[0]);
+            const startMinute = parseInt(startTime.split(':')[1]);
+            const startTimeMinutes = startHour * 60 + startMinute;
+            
+            const peakStart = 16 * 60 + 30; // 16:30
+            const peakEnd = 21 * 60;        // 21:00
+            
+            // Время окончания игры
+            const gameDurationMinutes = duration * 60;
+            const endTimeMinutes = startTimeMinutes + gameDurationMinutes;
+            
+            // Проверяем пересечение интервалов
+            const isPeakTime = (startTimeMinutes < peakEnd && endTimeMinutes > peakStart);
+            
+            if (dayType === 'weekend') {
+                return 'выходной';
+            } else if (isPeakTime) {
+                return 'пересекается с 16:30-21:00';
+            } else {
+                return 'остальное время';
+            }
+        }
+
+        function getNextSlotTime(startTime, slotIndex) {
+            const [hours, minutes] = startTime.split(':').map(Number);
+            const totalMinutes = hours * 60 + minutes + (slotIndex * 45);
+            const newHours = Math.floor(totalMinutes / 60);
+            const newMinutes = totalMinutes % 60;
+            return `${newHours.toString().padStart(2, '0')}:${newMinutes.toString().padStart(2, '0')}`;
+        }
+
         function calculate() {
             const courts = parseInt(document.getElementById('courts').value);
             const players = parseInt(document.getElementById('players').value);
             const subs = parseInt(document.getElementById('subs').value);
-            const borderSlot = parseInt(document.getElementById('border_slot').value);
+            const dayType = document.getElementById('day_type').value;
+            const startTime = document.getElementById('start_time').value;
+            const duration = parseFloat(document.getElementById('duration').value);
 
             // Валидация
             if (subs > players) {
@@ -440,8 +531,13 @@
                 return;
             }
 
+            if (!startTime) {
+                showError('Укажите время начала игры');
+                return;
+            }
+
             try {
-                const result = squashMinCost(courts, subs, borderSlot);
+                const result = squashMinCost(courts, subs, startTime, dayType);
                 const payments = calculatePayments(result.cost, result.costWithoutSubs, players, subs);
                 
                 // Обновляем результаты
@@ -449,7 +545,7 @@
                 document.getElementById('cost-without-subs').textContent = `${result.costWithoutSubs} €`;
                 document.getElementById('savings').textContent = `${result.costWithoutSubs - result.cost} €`;
                 
-                document.getElementById('plan-details').innerHTML = formatPlan(result.plan, borderSlot);
+                document.getElementById('plan-details').innerHTML = formatPlan(result.plan, startTime, dayType);
                 
                 const paymentsHTML = Object.entries(payments).map(([player, amount]) => {
                     const className = player.includes('подпиской') ? 'player-with-sub' : 'player-normal';
