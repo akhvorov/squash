@@ -142,6 +142,71 @@
             background: rgba(255, 255, 255, 0.5);
         }
 
+        .useful-links {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 20px;
+            border: 1px solid #e9ecef;
+        }
+
+        .useful-links h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            text-align: center;
+        }
+
+        .links-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .useful-link {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            text-decoration: none;
+            color: inherit;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+
+        .useful-link:hover {
+            border-color: #4facfe;
+            box-shadow: 0 5px 15px rgba(79, 172, 254, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .link-icon {
+            font-size: 2em;
+            margin-right: 15px;
+        }
+
+        .link-content {
+            flex: 1;
+        }
+
+        .link-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .link-desc {
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+
+        @media (max-width: 600px) {
+            .links-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
 
 
         .form-row {
@@ -371,6 +436,27 @@
                 <div id="payments-details"></div>
             </div>
         </div>
+
+        <!-- Полезные ссылки -->
+        <div class="useful-links">
+            <h3 id="links-title">🔗 Полезные ссылки</h3>
+            <div class="links-grid">
+                <a href="https://www.airportsquash.de/squash-court-buchen/" target="_blank" class="useful-link">
+                    <div class="link-icon">📅</div>
+                    <div class="link-content">
+                        <div class="link-title" id="booking-title">Форма бронирования</div>
+                        <div class="link-desc" id="booking-desc">Забронировать корт онлайн</div>
+                    </div>
+                </a>
+                <a href="https://www.airportsquash.de/airport-squash/" target="_blank" class="useful-link">
+                    <div class="link-icon">💰</div>
+                    <div class="link-content">
+                        <div class="link-title" id="pricing-title">Прайс-лист</div>
+                        <div class="link-desc" id="pricing-desc">Актуальные цены и тарифы</div>
+                    </div>
+                </a>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -404,6 +490,17 @@
                 tabs: {
                     optimal: "Оптимальный",
                     noPp: "Без PowerPlay"
+                },
+                links: {
+                    title: "🔗 Полезные ссылки",
+                    booking: {
+                        title: "Форма бронирования",
+                        desc: "Забронировать корт онлайн"
+                    },
+                    pricing: {
+                        title: "Прайс-лист",
+                        desc: "Актуальные цены и тарифы"
+                    }
                 },
                 days: ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"],
                 dayTypes: {
@@ -445,6 +542,17 @@
                     optimal: "Optimal",
                     noPp: "No PowerPlay"
                 },
+                links: {
+                    title: "🔗 Useful Links",
+                    booking: {
+                        title: "Booking Form",
+                        desc: "Book a court online"
+                    },
+                    pricing: {
+                        title: "Price List",
+                        desc: "Current prices and rates"
+                    }
+                },
                 days: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
                 dayTypes: {
                     weekday: "weekday",
@@ -484,6 +592,17 @@
                 tabs: {
                     optimal: "Optimal",
                     noPp: "Kein PowerPlay"
+                },
+                links: {
+                    title: "🔗 Nützliche Links",
+                    booking: {
+                        title: "Buchungsformular",
+                        desc: "Platz online buchen"
+                    },
+                    pricing: {
+                        title: "Preisliste",
+                        desc: "Aktuelle Preise und Tarife"
+                    }
                 },
                 days: ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"],
                 dayTypes: {
@@ -897,6 +1016,25 @@
             }
         }
 
+        function updateUsefulLinks() {
+            const t = translations[currentLanguage].links;
+            if (document.getElementById('links-title')) {
+                document.getElementById('links-title').textContent = t.title;
+            }
+            if (document.getElementById('booking-title')) {
+                document.getElementById('booking-title').textContent = t.booking.title;
+            }
+            if (document.getElementById('booking-desc')) {
+                document.getElementById('booking-desc').textContent = t.booking.desc;
+            }
+            if (document.getElementById('pricing-title')) {
+                document.getElementById('pricing-title').textContent = t.pricing.title;
+            }
+            if (document.getElementById('pricing-desc')) {
+                document.getElementById('pricing-desc').textContent = t.pricing.desc;
+            }
+        }
+
         function updateInterface() {
             const t = translations[currentLanguage];
             
@@ -936,6 +1074,9 @@
             
             // Обновляем названия вкладок
             updateTabLabels();
+            
+            // Обновляем полезные ссылки
+            updateUsefulLinks();
         }
 
         function updateDayDisplay() {
