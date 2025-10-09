@@ -106,6 +106,42 @@
             border-color: white;
         }
 
+        .tabs-container {
+            margin-bottom: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 4px;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            color: #6c757d;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .tab:hover:not(.active) {
+            color: #495057;
+            background: rgba(255, 255, 255, 0.5);
+        }
+
 
 
         .form-row {
@@ -302,6 +338,13 @@
         </div>
 
         <div class="results hidden" id="results">
+            <div class="tabs-container">
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('optimal')" id="tab-optimal">Optimal</button>
+                    <button class="tab" onclick="switchTab('no-pp')" id="tab-no-pp">No PP</button>
+                </div>
+            </div>
+
             <div class="cost-summary">
                 <h3 id="cost-title">💰 Стоимость</h3>
                 <div class="cost-item">
@@ -358,6 +401,10 @@
                     plan: "📋 Оптимальный план",
                     payments: "💳 Платежи по игрокам"
                 },
+                tabs: {
+                    optimal: "Оптимальный",
+                    noPp: "Без PowerPlay"
+                },
                 days: ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"],
                 dayTypes: {
                     weekday: "рабочий день",
@@ -393,6 +440,10 @@
                     savings: "Savings from subscriptions:",
                     plan: "📋 Optimal plan",
                     payments: "💳 Player payments"
+                },
+                tabs: {
+                    optimal: "Optimal",
+                    noPp: "No PowerPlay"
                 },
                 days: ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
                 dayTypes: {
@@ -430,6 +481,10 @@
                     plan: "📋 Optimaler Plan",
                     payments: "💳 Spielerzahlungen"
                 },
+                tabs: {
+                    optimal: "Optimal",
+                    noPp: "Kein PowerPlay"
+                },
                 days: ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"],
                 dayTypes: {
                     weekday: "Werktag",
@@ -444,6 +499,7 @@
         };
 
         let currentLanguage = 'ru';
+        let currentAlgorithm = 'optimal';
 
         // Цены на человека
         const PRICES = {
@@ -504,6 +560,10 @@
         }
 
         function squashMinCost(courts, subs, startTime, dayType) {
+            if (currentAlgorithm === 'no-pp') {
+                return squashNoPPCost(courts, subs, startTime, dayType);
+            }
+            
             let bestCost = Infinity;
             let bestPlan = null;
             const costWithoutSubs = courts * getPPPrice(startTime, dayType) * 2;
@@ -542,6 +602,33 @@
             }
 
             return { cost: bestCost, plan: bestPlan, costWithoutSubs };
+        }
+
+        function squashNoPPCost(courts, subs, startTime, dayType) {
+            // Простой алгоритм: все корты как обычные слоты (без PowerPlay)
+            const slotsForSubs = [];
+            
+            for (let i = 0; i < courts; i++) {
+                // Каждый корт = 2 слота на каждого из 2-х игроков
+                slotsForSubs.push(getSlotPrice(startTime, dayType, 0));
+                slotsForSubs.push(getSlotPrice(startTime, dayType, 0));
+                slotsForSubs.push(getSlotPrice(startTime, dayType, 1));
+                slotsForSubs.push(getSlotPrice(startTime, dayType, 1));
+            }
+
+            // Применяем подписки к разбитым слотам
+            const freeSlots = subs;
+            const slotCostsSorted = slotsForSubs.sort((a, b) => a - b);
+            const paidSlots = slotCostsSorted.slice(freeSlots);
+            const costWithSubs = paidSlots.reduce((sum, cost) => sum + cost, 0);
+            
+            // Стоимость без подписок (все как PowerPlay для сравнения)
+            const costWithoutSubs = courts * getPPPrice(startTime, dayType) * 2;
+            
+            // План: все корты как обычные слоты
+            const plan = new Array(courts).fill("slots");
+
+            return { cost: costWithSubs, plan: plan, costWithoutSubs };
         }
 
         function generateChoices(courts) {
@@ -756,6 +843,9 @@
             // Устанавливаем сегодняшний день по умолчанию
             setTodayAsDefault();
             
+            // Инициализируем переводы вкладок
+            updateTabLabels();
+            
             const inputs = document.querySelectorAll('input, select');
             inputs.forEach(input => {
                 input.addEventListener('change', calculate);
@@ -777,6 +867,33 @@
             const resultsDiv = document.getElementById('results');
             if (resultsDiv && !resultsDiv.classList.contains('hidden')) {
                 calculate();
+            }
+        }
+
+        function switchTab(algorithm) {
+            currentAlgorithm = algorithm;
+            
+            // Обновляем активную вкладку
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.getElementById(`tab-${algorithm}`).classList.add('active');
+            
+            // Обновляем названия вкладок
+            updateTabLabels();
+            
+            // Если результаты уже показаны, пересчитываем их с новым алгоритмом
+            const resultsDiv = document.getElementById('results');
+            if (resultsDiv && !resultsDiv.classList.contains('hidden')) {
+                calculate();
+            }
+        }
+
+        function updateTabLabels() {
+            const t = translations[currentLanguage].tabs;
+            if (document.getElementById('tab-optimal')) {
+                document.getElementById('tab-optimal').textContent = t.optimal;
+            }
+            if (document.getElementById('tab-no-pp')) {
+                document.getElementById('tab-no-pp').textContent = t.noPp;
             }
         }
 
@@ -816,6 +933,9 @@
             
             // Обновляем отображение дня
             updateDayDisplay();
+            
+            // Обновляем названия вкладок
+            updateTabLabels();
         }
 
         function updateDayDisplay() {
