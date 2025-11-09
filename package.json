@@ -1,0 +1,14 @@
+{
+  "name": "squash-calculator",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Калькулятор стоимости игры в сквош",
+  "scripts": {
+    "test": "node --test src/calculator.test.js",
+    "test:watch": "node --test --watch src/calculator.test.js"
+  },
+  "keywords": ["squash", "calculator"],
+  "author": "",
+  "license": "MIT"
+}
+

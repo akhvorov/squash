@@ -406,7 +406,7 @@
         <div class="results hidden" id="results">
             <div class="tabs-container">
                 <div class="tabs">
-                    <button class="tab active" onclick="switchTab('optimal')" id="tab-optimal">Optimal</button>
+                    <button class="tab active" onclick="switchTab('distribution')" id="tab-distribution">Distribution</button>
                     <button class="tab" onclick="switchTab('no-pp')" id="tab-no-pp">No PP</button>
                 </div>
             </div>
@@ -489,7 +489,7 @@
                     payments: "💳 Платежи по игрокам"
                 },
                 tabs: {
-                    optimal: "Оптимальный",
+                    distribution: "Распределение",
                     noPp: "Без PowerPlay"
                 },
                 links: {
@@ -540,7 +540,7 @@
                     payments: "💳 Player payments"
                 },
                 tabs: {
-                    optimal: "Optimal",
+                    distribution: "Distribution",
                     noPp: "No PowerPlay"
                 },
                 links: {
@@ -591,7 +591,7 @@
                     payments: "💳 Spielerzahlungen"
                 },
                 tabs: {
-                    optimal: "Optimal",
+                    distribution: "Verteilung",
                     noPp: "Kein PowerPlay"
                 },
                 links: {
@@ -619,7 +619,7 @@
         };
 
         let currentLanguage = 'ru';
-        let currentAlgorithm = 'optimal';
+        let currentAlgorithm = 'distribution';
 
         // Цены на человека
         const PRICES = {
@@ -683,6 +683,10 @@
             if (currentAlgorithm === 'no-pp') {
                 return squashNoPPCost(courts, subs, startTime, dayType);
             }
+            if (currentAlgorithm === 'distribution') {
+                const players = parseInt(document.getElementById('players').value);
+                return squashDistributionCost(courts, players, subs, startTime, dayType);
+            }
             
             let bestCost = Infinity;
             let bestPlan = null;
@@ -742,13 +746,407 @@
             const paidSlots = slotCostsSorted.slice(freeSlots);
             const costWithSubs = paidSlots.reduce((sum, cost) => sum + cost, 0);
             
-            // Стоимость без подписок (все как PowerPlay для сравнения)
-            const costWithoutSubs = courts * getPPPrice(startTime, dayType) * 2;
+            // Стоимость без подписок (все как обычные слоты без подписок)
+            const costWithoutSubs = slotsForSubs.reduce((sum, cost) => sum + cost, 0);
             
             // План: все корты как обычные слоты
             const plan = new Array(courts).fill("slots");
 
             return { cost: costWithSubs, plan: plan, costWithoutSubs };
+        }
+
+        function squashDistributionCost(courts, players, subs, startTime, dayType) {
+            // Генерируем все возможные распределения людей по кортам
+            const distributions = generateDistributions(players, courts);
+            
+            let bestCost = Infinity;
+            let bestDistribution = null;
+            let bestPlan = null;
+            let bestBookingCount = Infinity;
+            let bestBookings = null; // Кто бронирует какие корты
+            let bestPPCount = 0; // Количество PowerPlay кортов (для приоритета при равной стоимости)
+            
+            for (const dist of distributions) {
+                // dist - массив, где каждый элемент - количество людей на корте
+                // Например, [2, 3] означает 2 человека на первом корте, 3 на втором
+                
+                // Генерируем все возможные варианты, кто бронирует какие корты
+                // и как распределены подписки
+                const bookingOptions = generateBookingOptions(dist, players, subs);
+                
+                for (const bookingOption of bookingOptions) {
+                    // bookingOption содержит:
+                    // - playerAssignment: массив массивов, кто играет на каждом корте
+                    // - bookings: массив, где каждый элемент - кто бронирует корт (индекс человека 1-based)
+                    // - subDistribution: массив подписок на каждый корт
+                    
+                    let totalCost = 0;
+                    let plan = [];
+                    
+                    // Группируем корты по типу для броней:
+                    // - Одна бронь для всех PowerPlay кортов
+                    // - Одна бронь для всех обычных кортов
+                    let hasPP = false;
+                    let hasSlots = false;
+                    let ppCount = 0; // Количество PowerPlay кортов
+                    
+                    for (let i = 0; i < bookingOption.playerAssignment.length; i++) {
+                        const playersOnCourt = bookingOption.playerAssignment[i]; // Массив индексов людей
+                        const playersCount = playersOnCourt.length;
+                        const subsOnCourt = bookingOption.subDistribution[i];
+                        const bookerIndex = bookingOption.bookings[i]; // Кто бронирует этот корт
+                        
+                        // PowerPlay возможен только если:
+                        // 1. Ровно 2 человека на корте
+                        // 2. Нет подписок на этом корте (внутри брони)
+                        if (playersCount === 2 && subsOnCourt === 0) {
+                            // PowerPlay возможен
+                            hasPP = true;
+                            ppCount++;
+                            const ppCost = getPPPrice(startTime, dayType) * 2;
+                            totalCost += ppCost;
+                            plan.push({ 
+                                type: 'pp', 
+                                players: 2, 
+                                subs: 0, 
+                                cost: ppCost, 
+                                booker: bookerIndex,
+                                playersList: [...playersOnCourt],
+                                courtIndex: i
+                            });
+                        } else {
+                            // Обычные слоты
+                            hasSlots = true;
+                            
+                            // Корт = 2 слота (независимо от количества людей)
+                            // Каждый слот можно разбить на части для людей
+                            // 1 подписка покрывает 0.5 корта = 1 слот
+                            const slot1Price = getSlotPrice(startTime, dayType, 0);
+                            const slot2Price = getSlotPrice(startTime, dayType, 1);
+                            
+                            // Корт имеет 2 слота, каждый слот можно разбить на 2 части (для 2 человек)
+                            // Итого 4 "полуслота" на корт
+                            const courtSlots = [
+                                slot1Price, // полуслот 1
+                                slot1Price, // полуслот 2
+                                slot2Price, // полуслот 3
+                                slot2Price  // полуслот 4
+                            ];
+                            
+                            // Определяем, сколько людей с подписками играет на этом корте
+                            const playersWithSubs = new Set();
+                            for (let i = 1; i <= subs; i++) {
+                                playersWithSubs.add(i);
+                            }
+                            const playersWithSubsOnCourt = playersOnCourt.filter(p => playersWithSubs.has(p));
+                            // Максимум подписок = min(количество людей с подписками на корте, 4 полуслота)
+                            const maxSubsOnCourt = Math.min(playersWithSubsOnCourt.length, 4);
+                            
+                            // Применяем подписки к этому корту
+                            // Максимум подписок ограничен количеством людей с подписками и 4 полуслотами
+                            const slotsSorted = courtSlots.sort((a, b) => a - b);
+                            const subsForCourt = Math.min(subsOnCourt, slotsSorted.length, maxSubsOnCourt);
+                            const paidSlots = slotsSorted.slice(subsForCourt);
+                            const courtCost = paidSlots.reduce((sum, cost) => sum + cost, 0);
+                            
+                            totalCost += courtCost;
+                            plan.push({ 
+                                type: 'slots', 
+                                players: playersCount, 
+                                subs: subsForCourt, 
+                                cost: courtCost,
+                                booker: bookerIndex,
+                                playersList: [...playersOnCourt],
+                                courtIndex: i
+                            });
+                        }
+                    }
+                    
+                    // Количество броней: 1 если все корты одного типа, 2 если разных типов
+                    // Если одна группа пустая, не считаем её
+                    let bookingCount = 0;
+                    if (hasPP && hasSlots) {
+                        bookingCount = 2; // Две разные брони
+                    } else if (hasPP || hasSlots) {
+                        bookingCount = 1; // Все корты одного типа - одна бронь
+                    }
+                    
+                    // Выбираем вариант с минимальной стоимостью, а при равной стоимости:
+                    // 1. С меньшим количеством броней
+                    // 2. С большим количеством PowerPlay кортов (предпочтительнее PowerPlay)
+                    let isBetter = false;
+                    if (totalCost < bestCost) {
+                        isBetter = true;
+                    } else if (totalCost === bestCost) {
+                        if (bookingCount < bestBookingCount) {
+                            isBetter = true;
+                        } else if (bookingCount === bestBookingCount && ppCount > bestPPCount) {
+                            isBetter = true;
+                        }
+                    }
+                    
+                    if (isBetter) {
+                        bestCost = totalCost;
+                        bestDistribution = dist;
+                        bestPlan = plan;
+                        bestBookingCount = bookingCount;
+                        bestBookings = bookingOption.bookings;
+                        bestPPCount = ppCount;
+                    }
+                }
+            }
+            
+            // Стоимость без подписок: если players = 2 * courts, то все корты PowerPlay
+            // Иначе считаем оптимальную стоимость без подписок (все корты как обычные слоты)
+            let costWithoutSubs = 0;
+            if (players === 2 * courts) {
+                // Без подписок все корты будут PowerPlay
+                costWithoutSubs = courts * getPPPrice(startTime, dayType) * 2;
+            } else {
+                // Без подписок все корты как обычные слоты (4 полуслота на корт)
+                const slot1Price = getSlotPrice(startTime, dayType, 0);
+                const slot2Price = getSlotPrice(startTime, dayType, 1);
+                const courtSlots = [slot1Price, slot1Price, slot2Price, slot2Price];
+                const costPerCourt = courtSlots.reduce((sum, cost) => sum + cost, 0);
+                costWithoutSubs = courts * costPerCourt;
+            }
+            
+            return { 
+                cost: bestCost, 
+                plan: bestPlan, 
+                costWithoutSubs: costWithoutSubs,
+                distribution: bestDistribution,
+                bookingCount: bestBookingCount,
+                bookings: bestBookings
+            };
+        }
+
+        function generateBookingOptions(distribution, players, subs) {
+            // Генерируем все возможные варианты:
+            // 1. Кто конкретно играет на каждом корте (распределение людей)
+            // 2. Кто бронирует каждый корт (из людей на этом корте)
+            // 3. Как распределены подписки по кортам
+            
+            const options = [];
+            
+            // Сначала генерируем все возможные распределения конкретных людей по кортам
+            const playerAssignments = generatePlayerAssignments(distribution, players);
+            
+            for (const assignment of playerAssignments) {
+                // assignment - массив массивов, где каждый внутренний массив - индексы людей на корте (1-based)
+                // Например, [[1,2], [3,4,5]] означает игроки 1,2 на корте 1, игроки 3,4,5 на корте 2
+                
+                // Для каждого корта определяем, кто его бронирует (любой человек может бронировать)
+                const bookingVariants = generateBookingVariants(assignment, players);
+                
+                for (const bookings of bookingVariants) {
+                    // bookings - массив, где каждый элемент - кто бронирует корт (индекс человека 1-based)
+                    
+                    // Теперь генерируем распределение подписок с учетом ограничений
+                    generateSubDistributionsForBookings(assignment, bookings, subs, options);
+                }
+            }
+            
+            return options;
+        }
+
+        function generatePlayerAssignments(distribution, players) {
+            // Генерируем все возможные распределения конкретных людей по кортам
+            const assignments = [];
+            const playerList = Array.from({length: players}, (_, i) => i + 1); // [1, 2, 3, ...]
+            
+            function generate(currentAssignment, remainingPlayers, courtIndex) {
+                if (courtIndex === distribution.length) {
+                    if (remainingPlayers.length === 0) {
+                        assignments.push(currentAssignment.map(arr => [...arr]));
+                    }
+                    return;
+                }
+                
+                const playersNeeded = distribution[courtIndex];
+                
+                // Генерируем все комбинации playersNeeded людей из remainingPlayers
+                function generateCombinations(combo, remaining, needed) {
+                    if (needed === 0) {
+                        const newAssignment = [...currentAssignment, combo];
+                        const newRemaining = remainingPlayers.filter(p => !combo.includes(p));
+                        generate(newAssignment, newRemaining, courtIndex + 1);
+                        return;
+                    }
+                    
+                    if (remaining.length < needed) return;
+                    
+                    for (let i = 0; i <= remaining.length - needed; i++) {
+                        generateCombinations([...combo, remaining[i]], remaining.slice(i + 1), needed - 1);
+                    }
+                }
+                
+                generateCombinations([], remainingPlayers, playersNeeded);
+            }
+            
+            generate([], playerList, 0);
+            return assignments;
+        }
+
+        function generateBookingVariants(playerAssignment, players) {
+            // Генерируем все варианты, кто бронирует каждый корт
+            // Бронь может сделать любой человек (не обязательно играющий на корте)
+            // Это позволяет объединять брони, уменьшая количество броней
+            const variants = [];
+            const allPlayers = Array.from({length: players}, (_, i) => i + 1); // [1, 2, 3, ...]
+            
+            function generate(currentBookings, courtIndex) {
+                if (courtIndex === playerAssignment.length) {
+                    variants.push([...currentBookings]);
+                    return;
+                }
+                
+                // Бронь может сделать любой человек (для объединения броней)
+                for (const booker of allPlayers) {
+                    currentBookings.push(booker);
+                    generate(currentBookings, courtIndex + 1);
+                    currentBookings.pop();
+                }
+            }
+            
+            generate([], 0);
+            return variants;
+        }
+
+        function generateSubDistributionsForBookings(playerAssignment, bookings, subs, options) {
+            // Генерируем распределение подписок с учетом того, что:
+            // - Подписки применяются только к людям на забронированном корте
+            // - Если у человека есть подписка и он бронирует корт, но не использует её на этом корте, её нельзя перенести
+            // - Максимум подписок на корте = количество людей на этом корте (каждый человек может иметь максимум 1 подписку)
+            
+            const courts = playerAssignment.length;
+            
+            // Сначала определяем, у каких людей есть подписки (первые subs человек имеют подписки)
+            const playersWithSubs = new Set();
+            for (let i = 1; i <= subs; i++) {
+                playersWithSubs.add(i);
+            }
+            
+            function generate(currentSubs, remainingSubs, courtIndex) {
+                if (courtIndex === courts) {
+                    if (remainingSubs === 0) {
+                        options.push({
+                            playerAssignment: playerAssignment.map(arr => [...arr]),
+                            bookings: [...bookings],
+                            subDistribution: [...currentSubs]
+                        });
+                    }
+                    return;
+                }
+                
+                const playersOnCourt = playerAssignment[courtIndex];
+                const booker = bookings[courtIndex];
+                
+                // Корт = 4 полуслота (независимо от количества людей)
+                const maxSlots = 4;
+                
+                // Максимум подписок на этом корте = min(количество людей с подписками на корте, 4 полуслота)
+                // Подписки могут быть только у людей, играющих на этом корте
+                // Каждый человек может иметь максимум 1 подписку
+                const playersWithSubsOnCourt = playersOnCourt.filter(p => playersWithSubs.has(p));
+                const maxSubs = Math.min(remainingSubs, playersWithSubsOnCourt.length, maxSlots);
+                
+                // Минимум подписок: 0 (можем не использовать подписки на этом корте)
+                const minSubs = 0;
+                
+                // Важно: не можем использовать больше подписок, чем людей с подписками на корте
+                if (maxSubs < 0) {
+                    return; // Невозможно распределить подписки
+                }
+                
+                for (let i = minSubs; i <= maxSubs; i++) {
+                    // Дополнительная проверка: i не должно превышать количество людей с подписками
+                    if (i > playersWithSubsOnCourt.length) {
+                        continue;
+                    }
+                    currentSubs.push(i);
+                    generate(currentSubs, remainingSubs - i, courtIndex + 1);
+                    currentSubs.pop();
+                }
+            }
+            
+            generate([], subs, 0);
+        }
+
+        function generateSubDistributions(subs, courtDistribution) {
+            // Генерируем все возможные распределения подписок по кортам
+            // Учитываем, что на корте с 2 людьми подписки не нужны для PowerPlay
+            const distributions = [];
+            const courts = courtDistribution.length;
+            
+            function generate(current, remaining, courtIndex) {
+                if (courtIndex === courts) {
+                    if (remaining === 0) {
+                        distributions.push([...current]);
+                    }
+                    return;
+                }
+                
+                const playersOnCourt = courtDistribution[courtIndex];
+                const maxSlots = playersOnCourt * 2; // Максимум слотов на корте
+                const maxSubs = Math.min(remaining, maxSlots);
+                
+                // Если на корте 2 человека, можем не использовать подписки (для PowerPlay)
+                // Но также можем использовать, если это выгоднее
+                const minSubs = 0;
+                
+                for (let i = minSubs; i <= maxSubs; i++) {
+                    current.push(i);
+                    generate(current, remaining - i, courtIndex + 1);
+                    current.pop();
+                }
+            }
+            
+            generate([], subs, 0);
+            return distributions;
+        }
+
+        function generateDistributions(players, courts) {
+            // Генерируем все возможные распределения players людей по courts кортам
+            // Каждый корт должен иметь минимум 2 человека
+            const distributions = [];
+            
+            function generate(current, remaining, remainingCourts) {
+                if (remainingCourts === 0) {
+                    if (remaining === 0) {
+                        distributions.push([...current]);
+                    }
+                    return;
+                }
+                
+                if (remainingCourts === 1) {
+                    // Последний корт должен иметь минимум 2 человека
+                    if (remaining >= 2) {
+                        current.push(remaining);
+                        distributions.push([...current]);
+                        current.pop();
+                    }
+                    return;
+                }
+                
+                // Минимум 2 человека на корт, максимум оставшиеся минус (количество оставшихся кортов * 2 - 2)
+                // Чтобы на оставшихся кортах было минимум по 2 человека
+                const min = 2;
+                const max = remaining - ((remainingCourts - 1) * 2);
+                
+                if (max < min) {
+                    return; // Невозможно распределить
+                }
+                
+                for (let i = min; i <= max; i++) {
+                    current.push(i);
+                    generate(current, remaining - i, remainingCourts - 1);
+                    current.pop();
+                }
+            }
+            
+            generate([], players, courts);
+            return distributions;
         }
 
         function generateChoices(courts) {
@@ -797,9 +1195,8 @@
             return payments;
         }
 
-        function formatPlan(plan, startTime, dayType) {
+        function formatPlan(plan, startTime, dayType, distribution, bookingCount) {
             const details = [];
-            let totalSubsUsed = 0;
             
             // Переводы для плана
             const courtText = currentLanguage === 'ru' ? 'Корт' : 
@@ -808,7 +1205,87 @@
                            currentLanguage === 'en' ? 'subscriptions' : 'Abonnements';
             const paymentText = currentLanguage === 'ru' ? 'оплатой' : 
                               currentLanguage === 'en' ? 'payment' : 'Zahlung';
+            const playersText = currentLanguage === 'ru' ? 'игроков' : 
+                              currentLanguage === 'en' ? 'players' : 'Spieler';
             
+            // Если это алгоритм распределения, план имеет другую структуру
+            if (currentAlgorithm === 'distribution' && plan && plan[0] && typeof plan[0] === 'object') {
+                const bookingText = currentLanguage === 'ru' ? 'бронирует' : 
+                                  currentLanguage === 'en' ? 'books' : 'bucht';
+                const playsText = currentLanguage === 'ru' ? 'играют' : 
+                                currentLanguage === 'en' ? 'play' : 'spielen';
+                
+                // Группируем корты по типу (PowerPlay и обычные слоты)
+                const ppCourts = plan.filter(p => p.type === 'pp');
+                const slotCourts = plan.filter(p => p.type === 'slots');
+                const hasBothTypes = ppCourts.length > 0 && slotCourts.length > 0;
+                
+                // Бронь 1: PowerPlay корты
+                if (ppCourts.length > 0) {
+                    // Показываем заголовок только если есть оба типа
+                    if (hasBothTypes) {
+                        const bookingTextPP = currentLanguage === 'ru' ? 'Бронь 1 (PowerPlay):' : 
+                                             currentLanguage === 'en' ? 'Booking 1 (PowerPlay):' : 
+                                             'Buchung 1 (PowerPlay):';
+                        details.push(`<div class="court-item" style="background: #e8f5e9; font-weight: 600; margin-bottom: 10px; margin-top: 10px;">${bookingTextPP}</div>`);
+                    }
+                    
+                    for (const courtPlan of ppCourts) {
+                        const courtNum = (courtPlan.courtIndex || 0) + 1;
+                        const playersList = courtPlan.playersList || [];
+                        const playersListStr = playersList.length > 0 ? 
+                            ` (${currentLanguage === 'ru' ? 'Игроки' : currentLanguage === 'en' ? 'Players' : 'Spieler'} ${playersList.join(', ')})` : '';
+                        const timeDesc = getTimeDescription(startTime, dayType, 1.5);
+                        const bookerText = currentLanguage === 'ru' ? `Игрок ${courtPlan.booker} ${bookingText}` :
+                                         currentLanguage === 'en' ? `Player ${courtPlan.booker} ${bookingText}` :
+                                         `Spieler ${courtPlan.booker} ${bookingText}`;
+                        details.push(`<div class="court-item"><strong>${courtText} ${courtNum}:</strong> ${bookerText}${playersListStr} - PowerPlay (${timeDesc}) - ${courtPlan.cost}€</div>`);
+                    }
+                }
+                
+                // Бронь 2: Обычные слоты
+                if (slotCourts.length > 0) {
+                    // Показываем заголовок только если есть оба типа
+                    if (hasBothTypes) {
+                        const bookingTextSlots = currentLanguage === 'ru' ? 'Бронь 2 (обычные слоты):' : 
+                                                currentLanguage === 'en' ? 'Booking 2 (regular slots):' : 
+                                                'Buchung 2 (normale Slots):';
+                        details.push(`<div class="court-item" style="background: #fff3e0; font-weight: 600; margin-bottom: 10px; margin-top: 10px;">${bookingTextSlots}</div>`);
+                    }
+                    
+                    for (const courtPlan of slotCourts) {
+                        const courtNum = (courtPlan.courtIndex || 0) + 1;
+                        const playersList = courtPlan.playersList || [];
+                        const playersListStr = playersList.length > 0 ? 
+                            ` (${currentLanguage === 'ru' ? 'Игроки' : currentLanguage === 'en' ? 'Players' : 'Spieler'} ${playersList.join(', ')})` : '';
+                        const time1 = getTimeDescription(startTime, dayType, 0.75);
+                        const time2 = getTimeDescription(getNextSlotTime(startTime, 1), dayType, 0.75);
+                        // Корт = 4 полуслота (независимо от количества людей)
+                        const slotsCount = 4;
+                        const paidSlotsCount = slotsCount - courtPlan.subs;
+                        const bookerText = currentLanguage === 'ru' ? `Игрок ${courtPlan.booker} ${bookingText}, ${courtPlan.players} ${playsText}` :
+                                         currentLanguage === 'en' ? `Player ${courtPlan.booker} ${bookingText}, ${courtPlan.players} ${playsText}` :
+                                         `Spieler ${courtPlan.booker} ${bookingText}, ${courtPlan.players} ${playsText}`;
+                        details.push(`<div class="court-item"><strong>${courtText} ${courtNum}:</strong> ${bookerText}${playersListStr} - ${courtPlan.subs} ${subsText} + ${paidSlotsCount} ${paymentText} = ${courtPlan.cost}€ (${time1}, ${time2})</div>`);
+                    }
+                }
+                
+                // Добавляем информацию о распределении и количестве броней
+                if (distribution) {
+                    const distText = currentLanguage === 'ru' ? 'Распределение:' : 
+                                    currentLanguage === 'en' ? 'Distribution:' : 'Verteilung:';
+                    const bookingsText = currentLanguage === 'ru' ? 'броней' : 
+                                        currentLanguage === 'en' ? 'bookings' : 'Buchungen';
+                    const bookingInfo = bookingCount !== undefined ? 
+                        ` | ${currentLanguage === 'ru' ? 'Минимум броней:' : currentLanguage === 'en' ? 'Min bookings:' : 'Min Buchungen:'} ${bookingCount}` : '';
+                    details.unshift(`<div class="court-item" style="background: #e3f2fd; font-weight: 600; margin-bottom: 10px;">${distText} ${distribution.join(' + ')} ${playersText}${bookingInfo}</div>`);
+                }
+                
+                return details.join('');
+            }
+            
+            // Старый формат для других алгоритмов
+            let totalSubsUsed = 0;
             for (let i = 0; i < plan.length; i++) {
                 const courtNum = i + 1;
                 const choice = plan[i];
@@ -919,7 +1396,7 @@
                 document.getElementById('cost-without-subs').textContent = `${result.costWithoutSubs} €`;
                 document.getElementById('savings').textContent = `${result.costWithoutSubs - result.cost} €`;
                 
-                document.getElementById('plan-details').innerHTML = formatPlan(result.plan, startTime, dayType);
+                document.getElementById('plan-details').innerHTML = formatPlan(result.plan, startTime, dayType, result.distribution, result.bookingCount);
                 
                 const paymentsHTML = Object.entries(payments).map(([player, amount]) => {
                     const className = player.includes('подпиской') ? 'player-with-sub' : 'player-normal';
@@ -1009,8 +1486,8 @@
 
         function updateTabLabels() {
             const t = translations[currentLanguage].tabs;
-            if (document.getElementById('tab-optimal')) {
-                document.getElementById('tab-optimal').textContent = t.optimal;
+            if (document.getElementById('tab-distribution')) {
+                document.getElementById('tab-distribution').textContent = t.distribution;
             }
             if (document.getElementById('tab-no-pp')) {
                 document.getElementById('tab-no-pp').textContent = t.noPp;
@@ -1098,6 +1575,60 @@
         function setTodayAsDefault() {
             updateDayDisplay();
         }
+
+        // Тесты для проверки логики выбора PowerPlay
+        function runTests() {
+            console.log('=== Тесты для проверки логики PowerPlay ===');
+            
+            // Тест 1: 6 игроков, 3 корта, 3 подписки, выходной день
+            // Ожидается: корт 2 должен быть PowerPlay (18€), а не обычные слоты с подпиской (18€)
+            console.log('\nТест 1: 6 игроков, 3 корта, 3 подписки');
+            const test1 = squashDistributionCost(3, 6, 3, '18:00', 'weekend');
+            console.log('Результат:', test1);
+            console.log('Стоимость:', test1.cost);
+            console.log('Количество PowerPlay кортов:', test1.plan ? test1.plan.filter(p => p.type === 'pp').length : 0);
+            console.log('План:', test1.plan);
+            
+            // Проверяем, что корт 2 - PowerPlay, если он стоит 18€
+            if (test1.plan) {
+                const court2 = test1.plan.find(p => p.courtIndex === 1); // Индекс 1 = корт 2
+                if (court2 && court2.cost === 18) {
+                    if (court2.type !== 'pp') {
+                        console.error('ОШИБКА: Корт 2 стоит 18€, но не PowerPlay!');
+                    } else {
+                        console.log('✓ Корт 2 правильно выбран как PowerPlay');
+                    }
+                }
+            }
+            
+            // Тест 2: 7 игроков, 3 корта, 3 подписки
+            console.log('\nТест 2: 7 игроков, 3 корта, 3 подписки');
+            const test2 = squashDistributionCost(3, 7, 3, '18:00', 'weekend');
+            console.log('Результат:', test2);
+            console.log('Стоимость:', test2.cost);
+            console.log('План:', test2.plan);
+            
+            // Тест 3: 4 игрока, 2 корта, 2 подписки
+            console.log('\nТест 3: 4 игрока, 2 корта, 2 подписки');
+            const test3 = squashDistributionCost(2, 4, 2, '18:00', 'weekend');
+            console.log('Результат:', test3);
+            console.log('Стоимость:', test3.cost);
+            console.log('Количество PowerPlay кортов:', test3.plan ? test3.plan.filter(p => p.type === 'pp').length : 0);
+            console.log('План:', test3.plan);
+            
+            // Проверяем, что при равной стоимости выбирается больше PowerPlay
+            if (test3.plan) {
+                const ppCount = test3.plan.filter(p => p.type === 'pp').length;
+                if (test3.cost === 36 && ppCount < 2) {
+                    console.error('ОШИБКА: При стоимости 36€ должны быть 2 PowerPlay корта!');
+                } else if (ppCount === 2) {
+                    console.log('✓ Правильно выбраны 2 PowerPlay корта');
+                }
+            }
+        }
+
+        // Запускаем тесты при загрузке страницы (можно убрать после отладки)
+        // runTests();
     </script>
 </body>
 </html>

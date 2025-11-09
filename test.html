@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тесты калькулятора сквош</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .test-pass {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .test-fail {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .test-info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+        }
+        pre {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Тесты калькулятора сквош</h1>
+    <div id="results"></div>
+
+    <script>
+        // Цены на человека
+        const PRICES = {
+            weekday: {
+                peak: { slot: 9, pp: 12 },
+                off_peak: { slot: 6, pp: 9 }
+            },
+            weekend: {
+                peak: { slot: 6, pp: 9 },
+                off_peak: { slot: 6, pp: 9 }
+            }
+        };
+
+        function getPriceForTime(startTime, dayType, duration) {
+            const startHour = parseInt(startTime.split(':')[0]);
+            const startMinute = parseInt(startTime.split(':')[1]);
+            const startTimeMinutes = startHour * 60 + startMinute;
+            const peakStart = 16 * 60 + 30;
+            const peakEnd = 21 * 60;
+            const gameDurationMinutes = duration * 60;
+            const endTimeMinutes = startTimeMinutes + gameDurationMinutes;
+            const isPeakTime = (startTimeMinutes < peakEnd && endTimeMinutes > peakStart);
+            const priceCategory = isPeakTime ? 'peak' : 'off_peak';
+            const dayPrices = PRICES[dayType];
+            const prices = dayPrices[priceCategory];
+            if (duration === 1.5) {
+                return prices.pp;
+            } else {
+                return prices.slot;
+            }
+        }
+
+        function getSlotPrice(startTime, dayType, slotIndex) {
+            const [hours, minutes] = startTime.split(':').map(Number);
+            const slotStartMinutes = hours * 60 + minutes + (slotIndex * 45);
+            const slotStartHours = Math.floor(slotStartMinutes / 60);
+            const slotStartMins = slotStartMinutes % 60;
+            const slotTimeStr = slotStartHours.toString().padStart(2, '0') + ':' + 
+                               slotStartMins.toString().padStart(2, '0');
+            return getPriceForTime(slotTimeStr, dayType, 0.75);
+        }
+
+        function getPPPrice(startTime, dayType) {
+            return getPriceForTime(startTime, dayType, 1.5);
+        }
+
+        function generateDistributions(players, courts) {
+            const distributions = [];
+            function generate(current, remaining, remainingCourts) {
+                if (remainingCourts === 0) {
+                    if (remaining === 0) {
+                        distributions.push([...current]);
+                    }
+                    return;
+                }
+                if (remainingCourts === 1) {
+                    if (remaining >= 2) {
+                        distributions.push([...current, remaining]);
+                    }
+                    return;
+                }
+                const minForThisCourt = 2;
+                const maxForThisCourt = remaining - (remainingCourts - 1) * 2;
+                for (let i = minForThisCourt; i <= maxForThisCourt; i++) {
+                    generate([...current, i], remaining - i, remainingCourts - 1);
+                }
+            }
+            generate([], players, courts);
+            return distributions;
+        }
+
+        function generatePlayerAssignments(distribution, players) {
+            const assignments = [];
+            const playerList = Array.from({length: players}, (_, i) => i + 1);
+            function generate(currentAssignment, remainingPlayers, courtIndex) {
+                if (courtIndex === distribution.length) {
+                    if (remainingPlayers.length === 0) {
+                        assignments.push(currentAssignment.map(arr => [...arr]));
+                    }
+                    return;
+                }
+                const playersNeeded = distribution[courtIndex];
+                function generateCombinations(combo, remaining, needed) {
+                    if (needed === 0) {
+                        const newAssignment = [...currentAssignment, combo];
+                        const newRemaining = remainingPlayers.filter(p => !combo.includes(p));
+                        generate(newAssignment, newRemaining, courtIndex + 1);
+                        return;
+                    }
+                    if (remaining.length < needed) return;
+                    for (let i = 0; i <= remaining.length - needed; i++) {
+                        generateCombinations([...combo, remaining[i]], remaining.slice(i + 1), needed - 1);
+                    }
+                }
+                generateCombinations([], remainingPlayers, playersNeeded);
+            }
+            generate([], playerList, 0);
+            return assignments;
+        }
+
+        function generateBookingVariants(playerAssignment, players) {
+            const variants = [];
+            const allPlayers = Array.from({length: players}, (_, i) => i + 1);
+            function generate(currentBookings, courtIndex) {
+                if (courtIndex === playerAssignment.length) {
+                    variants.push([...currentBookings]);
+                    return;
+                }
+                for (const booker of allPlayers) {
+                    currentBookings.push(booker);
+                    generate(currentBookings, courtIndex + 1);
+                    currentBookings.pop();
+                }
+            }
+            generate([], 0);
+            return variants;
+        }
+
+        function generateSubDistributionsForBookings(playerAssignment, bookings, subs, options) {
+            const courts = playerAssignment.length;
+            const playersWithSubs = new Set();
+            for (let i = 1; i <= subs; i++) {
+                playersWithSubs.add(i);
+            }
+            function generate(currentSubs, remainingSubs, courtIndex) {
+                if (courtIndex === courts) {
+                    if (remainingSubs === 0) {
+                        options.push({
+                            playerAssignment: playerAssignment.map(arr => [...arr]),
+                            bookings: [...bookings],
+                            subDistribution: [...currentSubs]
+                        });
+                    }
+                    return;
+                }
+                const playersOnCourt = playerAssignment[courtIndex];
+                const maxSlots = 4;
+                const playersWithSubsOnCourt = playersOnCourt.filter(p => playersWithSubs.has(p));
+                const maxSubs = Math.min(remainingSubs, playersWithSubsOnCourt.length, maxSlots);
+                const minSubs = 0;
+                if (maxSubs < 0) {
+                    return;
+                }
+                for (let i = minSubs; i <= maxSubs; i++) {
+                    if (i > playersWithSubsOnCourt.length) {
+                        continue;
+                    }
+                    currentSubs.push(i);
+                    generate(currentSubs, remainingSubs - i, courtIndex + 1);
+                    currentSubs.pop();
+                }
+            }
+            generate([], subs, 0);
+        }
+
+        function generateBookingOptions(distribution, players, subs) {
+            const options = [];
+            const playerAssignments = generatePlayerAssignments(distribution, players);
+            for (const assignment of playerAssignments) {
+                const bookingVariants = generateBookingVariants(assignment, players);
+                for (const bookings of bookingVariants) {
+                    generateSubDistributionsForBookings(assignment, bookings, subs, options);
+                }
+            }
+            return options;
+        }
+
+        function squashDistributionCost(courts, players, subs, startTime, dayType) {
+            const distributions = generateDistributions(players, courts);
+            let bestCost = Infinity;
+            let bestDistribution = null;
+            let bestPlan = null;
+            let bestBookingCount = Infinity;
+            let bestBookings = null;
+            let bestPPCount = 0;
+            
+            for (const dist of distributions) {
+                const bookingOptions = generateBookingOptions(dist, players, subs);
+                for (const bookingOption of bookingOptions) {
+                    let totalCost = 0;
+                    let plan = [];
+                    let hasPP = false;
+                    let hasSlots = false;
+                    let ppCount = 0;
+                    
+                    for (let i = 0; i < bookingOption.playerAssignment.length; i++) {
+                        const playersOnCourt = bookingOption.playerAssignment[i];
+                        const playersCount = playersOnCourt.length;
+                        const subsOnCourt = bookingOption.subDistribution[i];
+                        const bookerIndex = bookingOption.bookings[i];
+                        
+                        if (playersCount === 2 && subsOnCourt === 0) {
+                            hasPP = true;
+                            ppCount++;
+                            const ppCost = getPPPrice(startTime, dayType) * 2;
+                            totalCost += ppCost;
+                            plan.push({ 
+                                type: 'pp', 
+                                players: 2, 
+                                subs: 0, 
+                                cost: ppCost, 
+                                booker: bookerIndex,
+                                playersList: [...playersOnCourt],
+                                courtIndex: i
+                            });
+                        } else {
+                            hasSlots = true;
+                            const slot1Price = getSlotPrice(startTime, dayType, 0);
+                            const slot2Price = getSlotPrice(startTime, dayType, 1);
+                            const courtSlots = [slot1Price, slot1Price, slot2Price, slot2Price];
+                            const playersWithSubs = new Set();
+                            for (let i = 1; i <= subs; i++) {
+                                playersWithSubs.add(i);
+                            }
+                            const playersWithSubsOnCourt = playersOnCourt.filter(p => playersWithSubs.has(p));
+                            const maxSubsOnCourt = Math.min(playersWithSubsOnCourt.length, 4);
+                            const slotsSorted = courtSlots.sort((a, b) => a - b);
+                            const subsForCourt = Math.min(subsOnCourt, slotsSorted.length, maxSubsOnCourt);
+                            const paidSlots = slotsSorted.slice(subsForCourt);
+                            const courtCost = paidSlots.reduce((sum, cost) => sum + cost, 0);
+                            totalCost += courtCost;
+                            plan.push({ 
+                                type: 'slots', 
+                                players: playersCount, 
+                                subs: subsForCourt, 
+                                cost: courtCost,
+                                booker: bookerIndex,
+                                playersList: [...playersOnCourt],
+                                courtIndex: i
+                            });
+                        }
+                    }
+                    
+                    let bookingCount = 0;
+                    if (hasPP && hasSlots) {
+                        bookingCount = 2;
+                    } else if (hasPP || hasSlots) {
+                        bookingCount = 1;
+                    }
+                    
+                    let isBetter = false;
+                    if (totalCost < bestCost) {
+                        isBetter = true;
+                    } else if (totalCost === bestCost) {
+                        if (bookingCount < bestBookingCount) {
+                            isBetter = true;
+                        } else if (bookingCount === bestBookingCount && ppCount > bestPPCount) {
+                            isBetter = true;
+                        }
+                    }
+                    
+                    if (isBetter) {
+                        bestCost = totalCost;
+                        bestDistribution = dist;
+                        bestPlan = plan;
+                        bestBookingCount = bookingCount;
+                        bestBookings = bookingOption.bookings;
+                        bestPPCount = ppCount;
+                    }
+                }
+            }
+            
+            let costWithoutSubs = 0;
+            if (players === 2 * courts) {
+                costWithoutSubs = courts * getPPPrice(startTime, dayType) * 2;
+            } else {
+                const slot1Price = getSlotPrice(startTime, dayType, 0);
+                const slot2Price = getSlotPrice(startTime, dayType, 1);
+                const courtSlots = [slot1Price, slot1Price, slot2Price, slot2Price];
+                const costPerCourt = courtSlots.reduce((sum, cost) => sum + cost, 0);
+                costWithoutSubs = courts * costPerCourt;
+            }
+            
+            return { 
+                cost: bestCost, 
+                plan: bestPlan, 
+                costWithoutSubs: costWithoutSubs,
+                distribution: bestDistribution,
+                bookingCount: bestBookingCount,
+                bookings: bestBookings
+            };
+        }
+
+        function addResult(className, title, content) {
+            const div = document.createElement('div');
+            div.className = `test-result ${className}`;
+            div.innerHTML = `<h3>${title}</h3><pre>${content}</pre>`;
+            document.getElementById('results').appendChild(div);
+        }
+
+        function runTests() {
+            document.getElementById('results').innerHTML = '';
+            
+            // Тест 1: 6 игроков, 3 корта, 3 подписки
+            console.log('Тест 1: 6 игроков, 3 корта, 3 подписки');
+            const test1 = squashDistributionCost(3, 6, 3, '18:00', 'weekend');
+            const test1Plan = test1.plan || [];
+            const court2 = test1Plan.find(p => p.courtIndex === 1);
+            const ppCount = test1Plan.filter(p => p.type === 'pp').length;
+            
+            let test1Result = `Стоимость: ${test1.cost}€\n`;
+            test1Result += `Количество PowerPlay кортов: ${ppCount}\n`;
+            test1Result += `План:\n${JSON.stringify(test1Plan, null, 2)}\n\n`;
+            
+            if (court2 && court2.cost === 18) {
+                if (court2.type !== 'pp') {
+                    test1Result += `❌ ОШИБКА: Корт 2 стоит 18€, но не PowerPlay! Должен быть PowerPlay.`;
+                    addResult('test-fail', 'Тест 1: 6 игроков, 3 корта, 3 подписки - ПРОВАЛЕН', test1Result);
+                } else {
+                    test1Result += `✓ Корт 2 правильно выбран как PowerPlay`;
+                    addResult('test-pass', 'Тест 1: 6 игроков, 3 корта, 3 подписки - ПРОЙДЕН', test1Result);
+                }
+            } else {
+                test1Result += `ℹ Корт 2 не стоит 18€, проверка не применима`;
+                addResult('test-info', 'Тест 1: 6 игроков, 3 корта, 3 подписки - ИНФО', test1Result);
+            }
+            
+            // Тест 2: 4 игрока, 2 корта, 2 подписки
+            console.log('Тест 2: 4 игрока, 2 корта, 2 подписки');
+            const test2 = squashDistributionCost(2, 4, 2, '18:00', 'weekend');
+            const test2Plan = test2.plan || [];
+            const test2PPCount = test2Plan.filter(p => p.type === 'pp').length;
+            
+            let test2Result = `Стоимость: ${test2.cost}€\n`;
+            test2Result += `Количество PowerPlay кортов: ${test2PPCount}\n`;
+            test2Result += `План:\n${JSON.stringify(test2Plan, null, 2)}\n\n`;
+            
+            if (test2.cost === 36 && test2PPCount < 2) {
+                test2Result += `❌ ОШИБКА: При стоимости 36€ должны быть 2 PowerPlay корта!`;
+                addResult('test-fail', 'Тест 2: 4 игрока, 2 корта, 2 подписки - ПРОВАЛЕН', test2Result);
+            } else if (test2PPCount === 2) {
+                test2Result += `✓ Правильно выбраны 2 PowerPlay корта`;
+                addResult('test-pass', 'Тест 2: 4 игрока, 2 корта, 2 подписки - ПРОЙДЕН', test2Result);
+            } else {
+                test2Result += `ℹ Проверка не применима`;
+                addResult('test-info', 'Тест 2: 4 игрока, 2 корта, 2 подписки - ИНФО', test2Result);
+            }
+            
+            // Тест 3: 7 игроков, 3 корта, 3 подписки
+            console.log('Тест 3: 7 игроков, 3 корта, 3 подписки');
+            const test3 = squashDistributionCost(3, 7, 3, '18:00', 'weekend');
+            const test3Plan = test3.plan || [];
+            const test3PPCount = test3Plan.filter(p => p.type === 'pp').length;
+            
+            let test3Result = `Стоимость: ${test3.cost}€\n`;
+            test3Result += `Количество PowerPlay кортов: ${test3PPCount}\n`;
+            test3Result += `План:\n${JSON.stringify(test3Plan, null, 2)}`;
+            addResult('test-info', 'Тест 3: 7 игроков, 3 корта, 3 подписки', test3Result);
+        }
+
+        // Запускаем тесты при загрузке
+        window.onload = runTests;
+    </script>
+</body>
+</html>
+
